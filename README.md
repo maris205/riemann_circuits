@@ -23,13 +23,13 @@ We built non-autonomous chaotic circuits in SPICE simulation and real FPGA hardw
 ![Henon Attractor](img/fig_attractor.png)
 *Strange attractor from the SPICE Henon circuit simulation.*
 
-![Real Oscilloscope](img/fig_oscilloscope.jpg)
+<img src="img/fig_oscilloscope" alt="Real Oscilloscope" height="600" />
 *Chaotic waveform captured on a DS100 oscilloscope from the AX7020 FPGA board running the Logistic map engine.*
 
 <img src="img/hardware.jpg" alt="FPGA Hardware Setup" height="600" />
 *Our hardware setup: ALINX AX7020 (Zynq-7020) FPGA board + AN108 8-bit AD/DA module. Total cost ~800 CNY (~$110).*
 
-<img src="img/fig_fpga_autonomous.png" alt="FPGA Hardware Zeros" height="600" />
+<img src="img/fig_fpga_autonomous.png" alt="FPGA Hardware Zeros" />
 *Riemann zeros extracted from real FPGA hardware: 3 zeros (MAE=0.51) from oscilloscope CSV data. The complete chain from digital logic through DAC to physical measurement is validated.*
 
 ---
