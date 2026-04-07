@@ -29,7 +29,7 @@ We built non-autonomous chaotic circuits in SPICE simulation and real FPGA hardw
 <img src="img/hardware.jpg" alt="FPGA Hardware Setup" height="600">
 *Our hardware setup: ALINX AX7020 (Zynq-7020) FPGA board + AN108 8-bit AD/DA module. Total cost ~800 CNY (~$110).*
 
-![FPGA Hardware Zeros](img/fig_fpga_autonomous.png)
+<img src="img/fig_fpga_autonomous.png" alt="FPGA Hardware Zeros" height="600">
 *Riemann zeros extracted from real FPGA hardware: 3 zeros (MAE=0.51) from oscilloscope CSV data. The complete chain from digital logic through DAC to physical measurement is validated.*
 
 ---
