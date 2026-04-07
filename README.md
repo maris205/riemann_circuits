@@ -26,7 +26,7 @@ We built non-autonomous chaotic circuits in SPICE simulation and real FPGA hardw
 ![Real Oscilloscope](img/fig_oscilloscope.jpg)
 *Chaotic waveform captured on a DS100 oscilloscope from the AX7020 FPGA board running the Logistic map engine.*
 
-![FPGA Hardware Setup](img/hardware.jpg)
+<img src="img/hardware.jpg" alt="FPGA Hardware Setup" height="600">
 *Our hardware setup: ALINX AX7020 (Zynq-7020) FPGA board + AN108 8-bit AD/DA module. Total cost ~800 CNY (~$110).*
 
 ![FPGA Hardware Zeros](img/fig_fpga_autonomous.png)
