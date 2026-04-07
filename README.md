@@ -23,7 +23,7 @@ We built non-autonomous chaotic circuits in SPICE simulation and real FPGA hardw
 ![Henon Attractor](img/fig_attractor.png)
 *Strange attractor from the SPICE Henon circuit simulation.*
 
-<img src="img/fig_oscilloscope" alt="Real Oscilloscope" height="600" />
+<img src="img/fig_oscilloscope.jpg" alt="Real Oscilloscope" height="600" />
 *Chaotic waveform captured on a DS100 oscilloscope from the AX7020 FPGA board running the Logistic map engine.*
 
 <img src="img/hardware.jpg" alt="FPGA Hardware Setup" height="600" />
