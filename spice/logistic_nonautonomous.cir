@@ -1,0 +1,54 @@
+* ============================================================
+* Non-Autonomous Logistic Circuit for LTspice
+* For Riemann zero extraction (Markov + Hankel-DMD)
+*
+* Key difference from bifurcation experiment:
+*   MU is NOT fixed -- it cools from mu_c + delta to mu_c
+*   via logarithmic schedule: mu(n) = mu_dyna + k_opt/ln(n+c)^2
+*
+* Parameters (best config from paper):
+*   mu_c = 1.5437, delta = 0.012, N = 50000, c_offset = 10
+*   k_opt = 0.071769, mu_dyna = 1.543218
+*
+* Usage:
+*   1. Open in LTspice, Run
+*   2. File → Export Waveform → save v(v_out) as .txt
+*   3. Python: run analyze_logistic.py on the exported data
+* ============================================================
+
+.param T_CLK = 1u
+.param V_SAT = 10.8
+.param N_ITER = 50000
+.param C_OFF = 10
+.param K_OPT = 0.071769
+.param MU_DYNA = 1.543218
+
+* === Delay feedback ===
+Rsrc v_out tl_in 50
+T1 tl_in 0 tl_out 0 Z0=50 TD={T_CLK}
+Rload tl_out 0 50
+
+* === Buffer ===
+Bbuf v_x 0 V = 2*V(tl_out)
+
+* === Non-autonomous mu(n): cooling schedule ===
+* floor(TIME/T_CLK)+1 maps continuous time to discrete step n
+Bmu v_mu 0 V = {MU_DYNA} + {K_OPT} / (ln(floor(TIME/{T_CLK})+1+{C_OFF}) * ln(floor(TIME/{T_CLK})+1+{C_OFF}))
+
+* === Logistic map: 1 - mu(n) * x^2 ===
+Bmap v_sum 0 V = 1.0 - V(v_mu) * (1.004*V(v_x)*V(v_x) + 0.05)
+
+* === Bandwidth limitation ===
+Rop v_sum v_filt 160
+Cop v_filt 0 1n
+
+* === Soft saturation ===
+Bsat v_out 0 V = {V_SAT}*tanh(V(v_filt)/{V_SAT})
+
+* === Initial conditions ===
+.ic V(v_out)=0.5 V(v_filt)=0.5 V(tl_in)=0.25 V(tl_out)=0.25
+
+* === 50000 iterations ===
+.tran {T_CLK/20} {N_ITER*T_CLK} uic
+
+.end

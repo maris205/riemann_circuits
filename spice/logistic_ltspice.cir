@@ -1,0 +1,48 @@
+* ============================================================
+* Logistic Map Circuit for LTspice
+* Bifurcation experiment: change MU value to observe different dynamics
+*
+* Usage:
+*   1. Open in LTspice
+*   2. Click Run (green arrow)
+*   3. Right-click waveform → Add Trace → v(v_out)
+*
+* Change MU below:
+*   0.80 = fixed point
+*   1.10 = period-2
+*   1.30 = period-4
+*   1.5437 = Feigenbaum critical point
+*   1.70 = full chaos
+*   2.00 = strong chaos
+* ============================================================
+
+.param MU = 1.5437
+.param T_CLK = 1u
+.param V_SAT = 10.8
+.param N_ITER = 500
+
+* === Delay feedback via transmission line ===
+Rsrc v_out tl_in 50
+T1 tl_in 0 tl_out 0 Z0=50 TD={T_CLK}
+Rload tl_out 0 50
+
+* === Voltage doubling buffer ===
+Bbuf v_x 0 V = 2*V(tl_out)
+
+* === Logistic map: 1 - MU * x^2 ===
+Bmap v_sum 0 V = 1.0 - {MU} * (1.004*V(v_x)*V(v_x) + 0.05)
+
+* === Bandwidth limitation (RC, ~1MHz) ===
+Rop v_sum v_filt 160
+Cop v_filt 0 1n
+
+* === Soft saturation ===
+Bsat v_out 0 V = {V_SAT}*tanh(V(v_filt)/{V_SAT})
+
+* === Initial conditions ===
+.ic V(v_out)=0.5 V(v_filt)=0.5 V(tl_in)=0.25 V(tl_out)=0.25
+
+* === Transient analysis ===
+.tran {T_CLK/20} {N_ITER*T_CLK} uic
+
+.end

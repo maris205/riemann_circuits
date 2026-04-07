@@ -1,0 +1,57 @@
+* ============================================================
+* Non-Autonomous Henon Circuit for LTspice
+* Dual channel: x' = 1 - a(n)*x^2 + y,  y' = b*x
+*
+* Parameters (best config from paper):
+*   a_c = 1.02, delta = 0.015, b = 0.3, N = 50000, c_offset = 10
+*   k_opt = 0.089711, a_dyna = 1.019398
+*
+* Usage:
+*   1. Open in LTspice, Run
+*   2. Export v(v_xout) as .txt
+*   3. Python: run analyze_henon.py on the exported data
+* ============================================================
+
+.param T_CLK = 1u
+.param V_SAT = 10.8
+.param N_ITER = 50000
+.param C_OFF = 10
+.param K_OPT = 0.089711
+.param A_DYNA = 1.019398
+.param B_HEN = 0.3
+
+* === X channel delay ===
+Rxsrc v_xout txl_in 50
+Tx1 txl_in 0 txl_out 0 Z0=50 TD={T_CLK}
+Rxload txl_out 0 50
+Bxbuf v_x_del 0 V = 2*V(txl_out)
+
+* === Y channel delay ===
+Rysrc v_yout tyl_in 50
+Ty1 tyl_in 0 tyl_out 0 Z0=50 TD={T_CLK}
+Ryload tyl_out 0 50
+Bybuf v_y_del 0 V = 2*V(tyl_out)
+
+* === Non-autonomous a(n) ===
+Ba v_a 0 V = {A_DYNA} + {K_OPT} / (ln(floor(TIME/{T_CLK})+1+{C_OFF}) * ln(floor(TIME/{T_CLK})+1+{C_OFF}))
+
+* === X map: 1 - a(n)*x^2 + y ===
+Bxmap v_xraw 0 V = 1.0 - V(v_a)*(1.004*V(v_x_del)*V(v_x_del)+0.05) + V(v_y_del)
+Rxop v_xraw v_xfilt 160
+Cxop v_xfilt 0 1n
+Bxsat v_xout 0 V = {V_SAT}*tanh(V(v_xfilt)/{V_SAT})
+
+* === Y map: b*x ===
+Bymap v_yraw 0 V = {B_HEN}*V(v_x_del)
+Ryop v_yraw v_yfilt 160
+Cyop v_yfilt 0 1n
+Bysat v_yout 0 V = {V_SAT}*tanh(V(v_yfilt)/{V_SAT})
+
+* === Initial conditions ===
+.ic V(v_xout)=0.1 V(v_yout)=0.1 V(v_xfilt)=0.1 V(v_yfilt)=0.1
++ V(txl_in)=0.05 V(txl_out)=0.05 V(tyl_in)=0.05 V(tyl_out)=0.05
+
+* === 50000 iterations ===
+.tran {T_CLK/20} {N_ITER*T_CLK} uic
+
+.end

@@ -1,0 +1,286 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{cite}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{caption}
+\usepackage{lineno}
+\usepackage{setspace}
+\usepackage{xcolor}
+
+% \linenumbers
+\onehalfspacing
+
+\title{\LARGE \textbf{Spectral Correspondence Between Dissipative Chaotic Circuits and Riemann Zeros: SPICE Simulation and FPGA Validation}}
+
+\author{
+Liang Wang\textsuperscript{1,*}
+\\[6pt]
+\textsuperscript{1}School of Artificial Intelligence and Automation, \\
+Huazhong University of Science and Technology, 430070, P.R. China \\[4pt]
+\textsuperscript{*}Corresponding author: \href{mailto:wangliang.f@gmail.com}{wangliang.f@gmail.com}
+}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+The Hilbert-P\'olya conjecture motivates the search for physical operators whose spectra encode Riemann zeta zeros. Here we investigate whether SPICE-simulated non-autonomous chaotic circuits --- with realistic component models including multiplier imperfection, op-amp bandwidth limitation, and saturation nonlinearity --- exhibit spectral signatures consistent with the first nontrivial Riemann zeros. We employ two complementary extraction methods: Markov eigenphase analysis (6 zeros matched with MAE\,=\,0.54) and a binning-free Hankel Dynamic Mode Decomposition that directly approximates Koopman operator eigenvalues (11 modes matched with MAE\,=\,1.09), overcoming the discretization bottleneck by 3.7$\times$. The eigenphase alignment procedure uses the first zero $t_1$ for single-point scaling and a supervised start-index selection based on the known $t_1/t_2$ ratio; subsequent zeros ($t_3$--$t_{11}$) serve as independent validation. Ratio-based comparison against null baselines (uniform, random, GUE) is consistent with zeta-specific structure under the present protocol, with the SPICE circuit achieving ratio MAE\,=\,0.18 versus 12.67 for uniform spacing. Hardware designs for discrete-component (${\sim}$80\,CNY) and FPGA (Zynq-7020, ${\sim}$800\,CNY) implementations are provided. Preliminary FPGA deployment yields 4 matched zeros (MAE\,=\,1.01) from oscilloscope data, demonstrating feasibility of the simulation-to-hardware pipeline. We emphasise that this spectral correspondence does not constitute a proof or realisation of the Hilbert-P\'olya conjecture, but provides empirical evidence motivating further investigation of the connection between dissipative chaotic dynamics and the Riemann spectrum.
+\end{abstract}
+
+% ============================================================
+\section*{Introduction}
+% ============================================================
+
+The Riemann hypothesis, concerning the location of nontrivial zeros of the zeta function $\zeta(s)$, remains one of the most profound unsolved problems in mathematics. The Hilbert-P\'olya conjecture offers a spectral route: if a self-adjoint operator exists whose eigenvalues are the Riemann zeros, the hypothesis follows\cite{berry1999}. Random matrix theory provides statistical support through GUE universality\cite{montgomery1973}, and quantum simulations have demonstrated spectral matching with up to 80 zeros using trapped-ion platforms\cite{cui2021}. However, no classical analog circuit has been shown to produce Riemann zeros through its natural dynamics.
+
+Previous work by the present author (non-peer-reviewed preprints) established numerical spectral correspondences between non-autonomous chaotic maps and Riemann zeros\cite{wang2026logistic,wang2026henon,wang2026prime}. The Markov transition matrix constructed from the chaotic trajectory approximates the Perron-Frobenius operator, whose eigenvalues encode the Ruelle-Pollicott resonances of the underlying dynamical zeta function\cite{ruelle1986,baladi2000}. These results, however, relied on idealised mathematical iteration, leaving a critical question unanswered: \emph{does the spectral isomorphism survive the physical imperfections inherent in real circuits?}
+
+Here we bridge this gap by constructing SPICE-level circuit simulations that incorporate realistic physical effects --- AD633 multiplier gain error (0.4\%), TL072 op-amp bandwidth limitation (1\,MHz), and soft saturation ($\pm$10.8\,V) --- and demonstrating zero extraction from the circuit output. Furthermore, we introduce Hankel Dynamic Mode Decomposition (Hankel-DMD) as a binning-free spectral method that directly approximates Koopman operator eigenvalues from the time series, overcoming the state-space discretization bottleneck inherent in Markov methods and extracting 3.7$\times$ more zeros from the same circuit data.
+
+% ============================================================
+\section*{Results}
+% ============================================================
+
+\subsection*{Chaotic circuit design and SPICE simulation}
+
+We implement discrete-time chaotic maps using a transmission-line delay feedback architecture (Fig.\,\ref{fig:circuit}a). A lossless transmission line ($Z_0 = 50\,\Omega$, $T_D = 1\,\mu$s) provides one-clock-period delay, functionally equivalent to a sample-and-hold stage. The nonlinear feedback path incorporates a behavioural AD633 analog multiplier model (0.4\% gain error, 5\,mV offset), a TL072 summing amplifier with RC bandwidth limitation (160\,$\Omega$ $\times$ 1\,nF $\approx$ 1\,MHz), and $\tanh$ soft saturation at $\pm$10.8\,V.
+
+The non-autonomous Logistic map $x_{n+1} = 1 - \mu(n) x_n^2$ is realised with a time-varying control parameter implemented via an ngspice B-source behavioural voltage source. The logarithmic cooling schedule
+\begin{equation}
+\mu(n) = \mu_{\text{dyna}} + \frac{k_{\text{opt}}}{\ln(n + c_{\text{offset}})^2}
+\label{eq:cooling}
+\end{equation}
+is constrained such that $\mu(1) = \mu_c + \delta\mu$ and $\mu(N) \approx \mu_c$, with $k_{\text{opt}} = \delta\mu / (t_{\text{start}} - t_{\text{end}})$ ensuring the system cools precisely to the critical point over $N$ iterations (see Methods).
+
+The 2D H\'enon circuit extends this to dual cross-coupled channels implementing $x' = 1 - a(n)x^2 + y$, $y' = bx$ (Fig.\,\ref{fig:circuit}b). The bifurcation diagram (Fig.\,\ref{fig:circuit}c) confirms that the period-doubling route to chaos is preserved under circuit physics, and the strange attractor (Fig.\,\ref{fig:circuit}d) exhibits the characteristic folded structure.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{paper_figs/fig_bifurcation.png}
+\caption{\textbf{SPICE chaotic circuit characterisation.}
+\textbf{a,b,} Circuit schematics for 1D Logistic and 2D H\'enon maps (see Supplementary Figs.\,1--2 for detailed diagrams).
+\textbf{c,} Bifurcation diagram of the SPICE Logistic circuit showing the complete period-doubling cascade to chaos, preserved under realistic component physics.
+\textbf{d,} H\'enon strange attractor from SPICE simulation.}
+\label{fig:circuit}
+\end{figure}
+
+\subsection*{Markov eigenphase extraction of Riemann zeros}
+
+From the non-autonomous SPICE circuit output, we construct Markov transition matrices via Gaussian kernel splatting and extract eigenphases through a supervised alignment procedure (see Methods). Systematic parameter search over 504 configurations (Logistic) and 120 configurations (H\'enon) yields the results in Table\,\ref{tab:markov}. We report the best configuration by MAE; the median MAE across all configurations with $\geq 3$ matched zeros is 1.8 (Logistic) and 2.1 (H\'enon), indicating that spectral correspondence is not restricted to a narrow parameter island but persists across a broad range of Markov parameters.
+
+\begin{table}[h]
+\centering
+\caption{\textbf{SPICE circuit Markov eigenphase results.} Best configurations after parameter search. $N_z$: number of matched zeros; MAE: mean absolute error; $\sum|e|$: cumulative absolute error.}
+\label{tab:markov}
+\begin{tabular}{lccccccc}
+\toprule
+Circuit & $\delta$ & $\varepsilon$ & Steps & $N_z$ & MAE & MSE & $\sum|e|$ \\
+\midrule
+Logistic & 0.012 & 0.01 & 50\,k & 6 & 0.536 & 0.718 & 3.218 \\
+H\'enon & 0.015 & 0.015 & 20\,k & 3 & 0.210 & 0.100 & 0.630 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Logistic circuit matches 6 zeros with notable precision: $t_4$ (error 0.21\%), $t_6$ (error 0.01\%). The H\'enon circuit achieves the lowest MAE (0.21) for 3 zeros, with $t_3$ matched to 0.37\% (Fig.\,\ref{fig:zeros}a).
+
+\subsection*{Ratio-based validation against null baselines}
+
+To rule out the possibility that single-point scaling trivially fits any monotonic sequence, we evaluate the scaling-independent ratio metric $\phi_n/\phi_1$ versus $t_n/t_1$. The SPICE Logistic circuit achieves a ratio MAE of 0.18, compared to 12.67 for uniform spacing (70$\times$ worse), 5.64 for random sorted sequences (31$\times$ worse), and 11.56 for GUE random matrix eigenvalues (64$\times$ worse) (Table\,\ref{tab:ratio}). For reference, ideal numerical iteration achieves ratio MAE\,=\,0.31. The fact that SPICE circuit eigenphases substantially outperform all null baselines under the present alignment protocol suggests zeta-specific spectral structure, though we note that the null baselines do not undergo the same supervised alignment and parameter search, which may contribute to the magnitude of the separation.
+
+\begin{table}[h]
+\centering
+\caption{\textbf{Ratio-based validation.} Scaling-independent comparison of eigenphase ratios $\phi_n/\phi_1$ against Riemann zero ratios $t_n/t_1$. SPICE and ideal results shown separately.}
+\label{tab:ratio}
+\begin{tabular}{lccc}
+\toprule
+Method & Ratio MAE & Factor vs.\ SPICE \\
+\midrule
+SPICE Logistic eigenphases & 0.18 & 1$\times$ (baseline) \\
+Ideal numerical iteration & 0.31 & 1.7$\times$ worse \\
+Random sorted & 5.64 & 31$\times$ worse \\
+GUE random matrix & 11.56 & 64$\times$ worse \\
+Uniform spacing & 12.67 & 70$\times$ worse \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Hankel-DMD breaks the discretization barrier}
+
+The Markov method requires binning the state space into $N$ discrete cells, fundamentally limiting the extractable zeros to $\sim N/10$. To overcome this, we introduce Hankel Dynamic Mode Decomposition, which approximates the Koopman operator eigenvalues directly from the time-delay embedded trajectory without any state-space discretization (see Methods).
+
+Applied to a 500\,k-step H\'enon SPICE trajectory, Hankel-DMD extracts \textbf{11 Koopman modes} matching Riemann zeros --- 3.7$\times$ more than the Markov method from the same circuit (Fig.\,\ref{fig:zeros}c, Table\,\ref{tab:dmd}). Key observations:
+
+\begin{itemize}
+\item $t_3$: error = 0.009 (0.03\%), near-perfect match
+\item 7 out of 11 zeros have $<$3\% relative error
+\item $t_{11}$: error = 0.31 (0.58\%), demonstrating extraction well beyond the Markov ceiling
+\item The optimal segment is the trajectory tail (last 1\%), corresponding to dynamics nearest the critical point where spectral structure is richest
+\end{itemize}
+
+\begin{table}[h]
+\centering
+\caption{\textbf{Hankel-DMD versus Markov.} Comparison of spectral extraction methods. Hankel-DMD requires no state-space binning and extracts 3.7$\times$ more zeros.}
+\label{tab:dmd}
+\begin{tabular}{lccccl}
+\toprule
+Method & Modes & MAE & Ratio MAE & Binning & Key setting \\
+\midrule
+Logistic Markov & 6 & 0.54 & 0.18 & Yes (500 bins) & $\delta\mu$=0.012 \\
+H\'enon Markov & 3 & 0.21 & 0.05 & Yes (1000 bins) & $\delta a$=0.015 \\
+Logistic DMD & 4 & 1.34 & 0.09 & \textbf{No} & obs=$|V|$, tail 5\% \\
+\textbf{H\'enon DMD} & \textbf{11} & \textbf{1.09} & \textbf{0.08} & \textbf{No} & tail 1\%, $d$=150 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.9\textwidth]{paper_figs/fig_markov.png}
+\\[12pt]
+\includegraphics[width=0.9\textwidth]{paper_figs/fig_dmd.png}
+\caption{\textbf{Riemann zero extraction from SPICE chaotic circuits.}
+\textbf{a,} Markov eigenphase results: predicted versus true zeros for Logistic (6 zeros) and H\'enon (3 zeros). Red numbers indicate absolute errors.
+\textbf{b,} Hankel-DMD results: 11 Koopman modes from the H\'enon circuit match Riemann zeros without any state-space binning. The tail-1\% segment (nearest the critical point) yields the richest spectral structure.}
+\label{fig:zeros}
+\end{figure}
+
+\subsection*{Hardware implementations}
+
+To enable experimental verification, we provide two complete hardware designs (Fig.\,\ref{fig:hardware}).
+
+\textbf{Discrete-component version ($\sim$80\,CNY).} Uses AD633 (analog multiplier), LF398 (sample-and-hold), TL072 (summing amplifier), NE555 (1\,MHz clock), and STM32\,+\,MCP4921 (12-bit DAC for cooling control). The SPICE simulation models the exact physical effects of these components; hardware behaviour is expected to closely match simulation.
+
+\textbf{FPGA version ($\sim$800\,CNY).} Targets the ALINX AX7020 (Zynq-7020) with AN108 8-bit AD/DA module. The programmable logic implements a Q4.28 fixed-point chaos engine (precision $3.7 \times 10^{-9}$, six orders of magnitude beyond AD633), with 4-stage pipeline supporting Logistic/H\'enon/Chua map switching at $<$6\% resource utilisation. The ARM processor runs Linux with Python for real-time Markov/DMD analysis. DAC output enables direct oscilloscope visualisation of chaotic waveforms.
+
+\textbf{Preliminary FPGA hardware validation (proof of feasibility).} We deployed the non-autonomous Logistic engine on an AX7020 development board with AN108 DAC, and captured the chaotic waveform using a DS100 digital oscilloscope. Markov eigenphase analysis of the oscilloscope data (5 acquisitions, 285\,k samples combined at 10\,kSa/s) yields 4 matched Riemann zeros with MAE\,=\,1.01 (Table\,\ref{tab:fpga}). Individual acquisitions yield 3--4 zeros with MAE ranging from 1.0 to 4.5, with variability attributable to oscilloscope sampling jitter and DAC quantisation. The Vivado behavioural simulation of the same Verilog design achieves 3 zeros at MAE\,=\,0.08 (precise mode) or 8 zeros at MAE\,=\,1.38 (discovery mode), confirming that the digital logic correctly implements the chaotic iteration. With high-speed digital readout bypassing the DAC, hardware results are expected to match simulation. The gap between simulation and hardware is attributable to DAC quantisation (8-bit), the AN108 analogue reconstruction filter, and oscilloscope sampling limitations --- not to the chaotic dynamics themselves. We label this as a proof of feasibility; systematic hardware characterisation is left for future work.
+
+\begin{table}[h]
+\centering
+\caption{\textbf{FPGA hardware validation results.} Comparison of Vivado simulation and real oscilloscope measurements from the AX7020 board.}
+\label{tab:fpga}
+\begin{tabular}{lcccl}
+\toprule
+Platform & Zeros & MAE & Best $t_n$ & Note \\
+\midrule
+Vivado sim (precise) & 3 & 0.08 & $t_2$: 0.3\% & Q4.28, no DAC \\
+Vivado sim (discovery) & 8 & 1.38 & $t_5$: 0.2\% & Q4.28, no DAC \\
+AX7020 + oscilloscope & 4 & 1.01 & $t_3$: 1.5\% & Real hardware \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.48\textwidth]{paper_figs/fig_schem_log.png}
+\hfill
+\includegraphics[width=0.48\textwidth]{paper_figs/fig_schem_hen.png}
+\caption{\textbf{Hardware implementations.}
+\textbf{a,} Discrete-component Logistic circuit schematic.
+\textbf{b,} Dual-channel H\'enon circuit with cross-coupling. Both designs include STM32\,+\,DAC for non-autonomous cooling control. FPGA design (not shown) replaces all analog components with a single Zynq-7020 SoC.}
+\label{fig:hardware}
+\end{figure}
+
+% ============================================================
+\section*{Discussion}
+% ============================================================
+
+Our central finding is that the spectral correspondence between non-autonomous chaotic maps and Riemann zeros, previously established through ideal numerical iteration\cite{wang2026logistic,wang2026henon}, \emph{persists under realistic circuit-level physical effects}. The Logistic SPICE circuit matches $t_6$ with 0.01\% relative error despite multiplier imperfection (0.4\%), bandwidth limitation (1\,MHz), and nonlinear saturation. This robustness is consistent with the topological nature of Ruelle-Pollicott resonances, which are insensitive to smooth perturbations of the dynamics\cite{baladi2000}. We stress that this spectral correspondence does not constitute a proof of the Hilbert-P\'olya conjecture, as the Markov transition matrix is a dissipative (non-unitary) operator, not a self-adjoint one. Rather, it provides empirical evidence that the eigenphase structure of chaotic dissipative systems contains information compatible with the Riemann spectrum.
+
+The introduction of Hankel-DMD as a binning-free spectral extraction method represents a methodological advance. By directly approximating the Koopman operator in delay-embedded coordinates, it bypasses the fundamental resolution limit of Markov discretization. The 3.7$\times$ improvement (11 versus 3 zeros) demonstrates that the information content of the chaotic time series exceeds what Markov binning can capture. The observation that the optimal observable differs between circuits --- $|V(t)|$ for Logistic (revealing symmetry-hidden components) versus raw $V(t)$ tail for H\'enon (richest spectral structure near criticality) --- suggests that observable selection is a key design parameter deserving further investigation. We note that the theoretical connection between the Perron-Frobenius/Koopman spectrum of non-autonomous chaotic maps and the Riemann zeta zeros should currently be regarded as heuristic and empirical rather than rigorously established; the present work provides additional evidence for this correspondence at the circuit level but does not resolve the underlying theoretical question.
+
+We note that the eigenphase nearest-neighbour spacing distribution does not match GUE statistics (KS $p < 0.001$), while Riemann zeros do (KS $p = 0.57$). This is expected: the Markov matrix is a dissipative (non-unitary) operator, so its spacing statistics differ from the Hermitian GUE ensemble. The zero \emph{positions} match, but the spacing statistics do not --- a distinction consistent with the Hilbert-P\'olya conjecture requiring a self-adjoint operator, which our Markov approximation is not.
+
+The hardware designs provided here --- from an 80\,CNY discrete PCB to an 800\,CNY FPGA platform --- lower the barrier to experimental verification. Preliminary deployment on an AX7020 FPGA board with oscilloscope capture yields 4 Riemann zeros (MAE\,=\,1.01) from real hardware data, demonstrating feasibility of the simulation-to-hardware chain. The FPGA implementation, with its Q4.28 precision ($3.7 \times 10^{-9}$) and ability to run 20+ parallel chaos engines, offers a practical platform for systematic exploration of the parameter space. An accompanying lecture series with Vivado simulation tutorials (5 labs) makes this accessible to undergraduate students with basic digital circuit knowledge.
+
+% ============================================================
+\section*{Methods}
+% ============================================================
+
+\subsection*{Non-autonomous cooling schedule}
+
+The cooling parameters are determined by boundary constraints ensuring the bifurcation parameter starts at $\mu_c + \delta\mu$ and reaches $\mu_c$ after $N$ steps:
+\begin{align}
+t_n &= \frac{1}{\ln(n + c_{\text{offset}})^2}, \quad
+k_{\text{opt}} = \frac{\delta\mu}{t_1 - t_N}, \quad
+\mu_{\text{dyna}} = \mu_c - k_{\text{opt}} \cdot t_N
+\end{align}
+For the Logistic map: $\mu_c = 1.5437$, $c_{\text{offset}} = 10$. For the H\'enon map: $a_c = 1.02$, $b = 0.3$.
+
+In ngspice, this is implemented as a B-source expression using the \texttt{TIME} variable with \texttt{floor(TIME/$T_{\text{clk}}$)+1} mapping continuous time to discrete iteration count.
+
+\subsection*{SPICE circuit netlist}
+
+The Logistic circuit netlist consists of: (1) lossless transmission line (\texttt{T1}, $Z_0$=50$\Omega$, $T_D$=1$\mu$s) with matched 50$\Omega$ source/load and voltage-doubling buffer; (2) B-source multiplier with gain error and offset (\texttt{Bsum}); (3) RC low-pass filter (160$\Omega$ + 1nF); (4) $\tanh$ soft saturation B-source. The H\'enon version duplicates this for the $y$-channel with a gain stage ($b \times x$) and cross-coupling. All simulations use ngspice-36 in batch mode.
+
+\subsection*{Markov eigenphase extraction}
+
+From the sampled trajectory $\{x_k\}$, we build the Markov transition matrix $P$ via Gaussian kernel splatting: for each transition $x_k \to x_{k+1}$, probability mass is distributed among neighbouring bins using a Gaussian kernel of width $\varepsilon$. Eigenvalues are computed via \texttt{scipy.sparse.linalg.eigs} with \texttt{which='LM'}. Eigenphases are extracted from eigenvalues with positive imaginary part and sorted by magnitude.
+
+\emph{Start-index selection (supervised step).} Because the Markov spectrum contains many eigenphases unrelated to the Riemann zeros, we identify the correct starting phase using a ratio-fingerprint scan: for each candidate start index $i$, we compute $\phi_i/\phi_{i+1}$ and select the $i$ that best matches the known ratio $t_1/t_2 = 0.6724$. This step uses information from the first two Riemann zeros and is therefore supervised. All subsequent zeros ($t_3, t_4, \ldots$) are \emph{not} used in the alignment and serve as independent validation targets. The matched zeros are obtained via single-point linear scaling: $t_n^{\text{pred}} = (t_1^{\text{true}}/\phi_1) \cdot \phi_n$.
+
+\subsection*{Hankel Dynamic Mode Decomposition}
+
+Given a scalar time series $\{x_k\}_{k=0}^{K-1}$, we construct Hankel matrices $\mathbf{X}, \mathbf{Y} \in \mathbb{R}^{d \times (K-d)}$ with time-delay embedding dimension $d$. The truncated SVD $\mathbf{X} = \mathbf{U}_r \mathbf{S}_r \mathbf{V}_r^T$ yields the reduced DMD matrix $\tilde{\mathbf{A}} = \mathbf{U}_r^T \mathbf{Y} \mathbf{V}_r^T \mathbf{S}_r^{-1}$, whose eigenvalues $z_k$ approximate the Koopman operator spectrum. Complex frequencies $s_k = \ln z_k$ are extracted; modes with $\mathrm{Im}(s_k) > 0.005$ and $|\mathrm{Re}(s_k)| < 1$ are retained, deduplicated (2\% threshold), and matched to Riemann zeros via single-point scaling. DMD hyperparameters (segment selection, embedding dimension $d$, truncation rank $r$, and observable function) were selected by retrospective optimisation against the known zeros; the reported results therefore represent the best achievable performance under this protocol rather than a blind prediction. For the 500k-step H\'enon circuit, optimal parameters are: tail-1\% segment (5000 points near critical point), $d = 150$ delays, $r = 30$ modes.
+
+\subsection*{Ratio-based validation}
+
+The scaling-independent ratio metric compares $\phi_n / \phi_1$ against $t_n / t_1$ without any free parameters. Null baselines include uniformly spaced sequences in $[0.1, \pi]$, random sorted sequences, and eigenvalues of GUE random Hermitian matrices, all with $n = 20$ elements averaged over 100 realisations.
+
+\subsection*{Hardware specifications}
+
+\emph{Discrete version:} AD633JNZ (multiplier, \$\sim$25\,CNY), LF398N (S/H, \$\sim$8\,CNY), TL072 (op-amp, \$\sim$2\,CNY), NE555 (clock, \$\sim$1\,CNY), STM32F103C8T6 + MCP4921 (MCU + 12-bit DAC, \$\sim$18\,CNY), 7812/7912 ($\pm$12V supply), double-layer PCB.
+
+\emph{FPGA version:} ALINX AX7020 (Zynq-7020, \$\sim$600\,CNY) + AN108 AD/DA module (8-bit, 125MSPS, \$\sim$100\,CNY). PL: Q4.28 fixed-point chaos engine, 4-stage pipeline, resource usage $<$6\% (800 LUT, 4 DSP48, 8 BRAM). PS: Linux + Python (Markov/DMD analysis, web UI). Verilog RTL, constraints, Vivado TCL scripts, and Python drivers are provided in the code repository.
+
+% ============================================================
+\section*{Data Availability}
+% ============================================================
+
+All SPICE netlists, simulation data, analysis scripts, hardware designs (schematics, Verilog RTL, Vivado project), and teaching materials (5-lab lecture series) are available at \url{https://github.com/maris205/riemann_circuits}.
+
+% ============================================================
+\section*{Acknowledgements}
+% ============================================================
+
+The author thanks the open-source communities of ngspice, NumPy, SciPy, and Vivado for enabling this work.
+
+% ============================================================
+\section*{Author Contributions}
+% ============================================================
+
+L.W.\ conceived the project, designed the circuits, performed simulations and analysis, designed the hardware, and wrote the manuscript.
+
+% ============================================================
+\section*{Competing Interests}
+% ============================================================
+
+The author declares no competing interests.
+
+% ============================================================
+\begin{thebibliography}{20}
+\bibitem{berry1999} Berry, M.\,V.\ \& Keating, J.\,P.\ The Riemann zeros and eigenvalue asymptotics. \emph{SIAM Review} \textbf{41}, 236--266 (1999).
+\bibitem{montgomery1973} Montgomery, H.\,L.\ The pair correlation of zeros of the zeta function. \emph{Proc.\ Symp.\ Pure Math.} \textbf{24}, 181--193 (1973).
+\bibitem{cui2021} Cui, X.\ \emph{et al.}\ Riemann zeros from Floquet engineering a trapped-ion qubit. \emph{npj Quantum Inf.} \textbf{7}, 75 (2021).
+\bibitem{wang2026prime} Wang, L.\ The emergence of prime distribution from low-dimensional deterministic chaos. \emph{Zenodo} (2026). \url{https://doi.org/10.5281/zenodo.18439638}
+\bibitem{wang2026logistic} Wang, L.\ Spectral isomorphism between renormalization flow in non-autonomous quadratic maps and Riemann zeros. \emph{Zenodo} (2026). \url{https://doi.org/10.5281/zenodo.19045440}
+\bibitem{wang2026henon} Wang, L.\ The physical topology of Riemann zeros: dual evidence from quantum coherence and macroscopic dissipation. \emph{Zenodo} (2026). \url{https://doi.org/10.5281/zenodo.19084735}
+\bibitem{ruelle1986} Ruelle, D.\ Resonances of chaotic dynamical systems. \emph{Phys.\ Rev.\ Lett.} \textbf{56}, 405--407 (1986).
+\bibitem{baladi2000} Baladi, V.\ \emph{Positive Transfer Operators and Decay of Correlations} (World Scientific, 2000).
+\bibitem{rafik2024} Rafik, N.\ \& Caceres, G.\ Chaotic operators with GUE statistics. Preprint at \url{https://arxiv.org/abs/2404.00583} (2024).
+\bibitem{yakaboylu2024} Yakaboylu, E.\ Non-symmetric operators and the Hilbert-P\'olya conjecture. Preprint at \url{https://arxiv.org/abs/2310.18625} (2024).
+\bibitem{schmid2010} Schmid, P.\,J.\ Dynamic mode decomposition of numerical and experimental data. \emph{J.\ Fluid Mech.} \textbf{656}, 5--28 (2010).
+\bibitem{brunton2022} Brunton, S.\,L.\ \& Kutz, J.\,N.\ \emph{Data-Driven Science and Engineering: Machine Learning, Dynamical Systems, and Control} 2nd edn (Cambridge Univ.\ Press, 2022).
+\bibitem{mezic2005} Mezi\'c, I.\ Spectral properties of dynamical systems, model reduction and decompositions. \emph{Nonlinear Dynamics} \textbf{41}, 309--325 (2005).
+\bibitem{chua1986} Matsumoto, T., Chua, L.\,O.\ \& Komuro, M.\ The double scroll. \emph{IEEE Trans.\ Circuits Syst.} \textbf{CAS-32}, 797--818 (1985).
+\bibitem{sprott2010} Sprott, J.\,C.\ \emph{Elegant Chaos: Algebraically Simple Chaotic Flows} (World Scientific, 2010).
+\bibitem{tu2014} Tu, J.\,H.\ \emph{et al.}\ On dynamic mode decomposition: theory and applications. \emph{J.\ Comput.\ Dyn.} \textbf{1}, 391--421 (2014).
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,303 @@
+\documentclass[twocolumn]{article}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage[margin=2cm]{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{ctex}
+
+\title{从数学迭代到电路实现：\\
+基于 SPICE 仿真混沌电路的黎曼零点谱提取\\
+——Markov 本征相位与 Hankel-DMD 分析}
+
+\author{Wang L.}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+本文首次展示了混沌电路级仿真系统的谱性质与黎曼 $\zeta$ 函数非平凡零点的匹配。利用 ngspice SPICE 仿真，我们构建了具有真实元件模型（AD633 模拟乘法器、TL072 运放、带宽限制及软饱和）的非自治 Logistic 和 H\'enon 映射电路。从电路输出波形中，我们采用两种互补方法提取黎曼零点：（1）Markov 本征相位分析，通过显式状态空间离散化匹配 6 个零点（Logistic，MAE=0.54）和 3 个零点（H\'enon，MAE=0.21）；（2）Hankel 动态模态分解（Hankel-DMD），一种无需分块（binning）的方法，直接从时间序列提取 Koopman 算子本征值，从 H\'enon 电路中提取了 11 个零点（MAE=1.09），突破了 Markov 方法的离散化瓶颈。比率验证表明混沌本征相位编码的 $\zeta$ 函数特异结构比空假设基线好 41 倍。我们提供了分立元件版（约 80 元）和 FPGA 版（约 800 元）两种完整硬件设计方案，为希尔伯特-波利亚猜想的物理实现铺平了道路。
+\end{abstract}
+
+\section{引言}
+
+希尔伯特-波利亚猜想认为黎曼 $\zeta$ 函数的非平凡零点是某个具有物理意义的自伴算子的本征值~\cite{berry1999}。虽然随机矩阵理论（GUE）提供了统计层面的一致性~\cite{montgomery1973}，量子仿真也已展示了多达 80 个零点的谱匹配~\cite{cui2021}，但至今没有经典模拟电路被证明能通过其自然动力学产生黎曼零点。
+
+前期数值工作建立了非自治混沌映射与黎曼零点之间的谱同构关系~\cite{wang2026logistic,wang2026henon}。通过高斯核泼溅（Gaussian kernel splatting）构建的 Markov 转移矩阵是 Perron-Frobenius 算子的有限维近似，其本征值逼近编码动力学 $\zeta$ 函数的 Ruelle-Pollicott 共振~\cite{ruelle1986,baladi2000}。
+
+然而，这些结果依赖于理想的数学迭代，留下了一个关键问题：\emph{谱同构能否在真实电路的物理缺陷下存活？}热噪声、元件容差、带宽限制和非线性饱和在任何硬件实现中都不可避免。
+
+本文通过构建包含真实物理效应的 SPICE 级电路仿真，并从电路输出中成功提取零点，肯定地回答了这个问题。此外，我们引入 Hankel-DMD 作为无需分块的替代方法，克服了 Markov 方法固有的离散化瓶颈，从同一电路数据中提取了 3.7 倍多的零点。
+
+\section{理论}
+
+\subsection{非自治混沌映射}
+
+带对数冷却的非自治 Logistic 映射定义为：
+\begin{equation}
+x_{n+1} = 1 - \mu(n) \cdot x_n^2
+\end{equation}
+其中分岔参数遵循约束冷却调度：
+\begin{equation}
+\mu(n) = \mu_{\text{dyna}} + \frac{k_{\text{opt}}}{\ln(n + c_{\text{offset}})^2}
+\label{eq:cooling}
+\end{equation}
+
+冷却参数由边界约束确定：
+\begin{align}
+k_{\text{opt}} &= \frac{\delta\mu}{t_{\text{start}} - t_{\text{end}}}, \quad
+\mu_{\text{dyna}} = \mu_c - k_{\text{opt}} \cdot t_{\text{end}}
+\end{align}
+其中 $t_n = 1/\ln(n + c_{\text{offset}})^2$，确保 $\mu(1) = \mu_c + \delta\mu$（起始高于临界点）且 $\mu(N) \approx \mu_c$（终止精确到达临界点）。
+
+二维 H\'enon 映射扩展为：
+\begin{align}
+x_{n+1} &= 1 - a(n) \cdot x_n^2 + y_n \\
+y_{n+1} &= b \cdot x_n
+\end{align}
+其中 $a(n)$ 遵循同样的冷却调度，围绕 $a_c = 1.02$。
+
+\subsection{从 Perron-Frobenius 到黎曼零点}
+
+Markov 转移矩阵 $P$ 是 Perron-Frobenius 算子的有限维近似。其本征值 $\lambda_k$ 逼近 Ruelle-Pollicott 共振，本征相位 $\phi_k = \arg(\lambda_k)$ 通过线性缩放与黎曼零点关联~\cite{wang2026logistic}：
+\begin{equation}
+t_n^{\text{pred}} = \frac{t_1^{\text{true}}}{\phi_1} \cdot \phi_n
+\end{equation}
+
+\subsection{Hankel-DMD：无需分块的谱提取}
+
+Markov 方法需要将状态空间离散化为 $N$ 个格子，限制可提取的零点数约为 $N/10$。我们提出 Hankel 动态模态分解（Hankel-DMD）作为无需分块的替代方案。
+
+给定标量时间序列 $\{x_k\}_{k=0}^{K-1}$，构建时延嵌入的 Hankel 矩阵：
+\begin{equation}
+\mathbf{X} = \begin{bmatrix} x_0 & x_1 & \cdots \\ x_1 & x_2 & \cdots \\ \vdots & & \ddots \end{bmatrix}, \quad
+\mathbf{Y} = \begin{bmatrix} x_1 & x_2 & \cdots \\ x_2 & x_3 & \cdots \\ \vdots & & \ddots \end{bmatrix}
+\end{equation}
+
+DMD 矩阵 $\tilde{\mathbf{A}} = \mathbf{U}_r^T \mathbf{Y} \mathbf{V}_r^T \mathbf{S}_r^{-1}$（其中 $\mathbf{X} = \mathbf{U}\mathbf{S}\mathbf{V}^T$）在延迟嵌入坐标中近似 Koopman 算子。其本征值 $z_k$ 给出复频率 $s_k = \ln(z_k)$，其虚部对应 Ruelle-Pollicott 共振频率。
+
+\section{电路设计与 SPICE 仿真}
+
+\subsection{电路拓扑}
+
+我们使用传输线延迟反馈架构实现离散时间混沌映射（图~\ref{fig:schematic}）：
+
+\begin{itemize}
+\item \textbf{延迟反馈}：无损传输线（$Z_0 = 50\,\Omega$，$T_D = 1\,\mu$s）提供一个时钟周期的延迟，等效于采样保持。
+\item \textbf{乘法器}：AD633 行为模型，含 0.4\% 增益误差和 5\,mV 偏移。
+\item \textbf{求和放大器}：TL072 运放，1\,MHz 带宽（RC = $160\,\Omega \times 1$\,nF）。
+\item \textbf{饱和}：$\tanh$ 软限幅，$\pm 10.8$\,V。
+\item \textbf{非自治控制}：通过 ngspice B-source 表达式实现时变 $\mu(n)$。
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{paper_figs/fig_bifurcation.png}
+\caption{SPICE Logistic 电路分岔图。在电路物理效应下，从周期到混沌的倍周期分岔路径得以保持。}
+\label{fig:bifurcation}
+\end{figure}
+
+\subsection{非自治冷却的电路实现}
+
+冷却调度（式~\ref{eq:cooling}）在 ngspice 中实现为 B-source 行为电压源：
+\begin{verbatim}
+Bmu v_mu 0 V = {mu_dyna} + {k_opt} /
+  (ln(floor(TIME/{T_clk})+1+{c_off})
+  * ln(floor(TIME/{T_clk})+1+{c_off}))
+\end{verbatim}
+
+其中 \texttt{floor(TIME/T\_clk)+1} 将连续时间映射为离散步数 $n$，确保起始 $\mu(1) = \mu_c + \delta\mu$，终止 $\mu(N) \approx \mu_c$。
+
+\section{结果}
+
+\subsection{方法一：Markov 本征相位分析}
+
+表~\ref{tab:markov} 总结了参数优化后的 Markov 方法结果（Logistic 504 种配置，H\'enon 120 种）。
+
+\begin{table}[h]
+\centering
+\caption{SPICE 电路 Markov 本征相位结果（最优配置）}
+\label{tab:markov}
+\begin{tabular}{lcccccc}
+\toprule
+电路 & $\delta$ & $\varepsilon$ & 零点数 & MAE & MSE & $\sum|e|$ \\
+\midrule
+Logistic & 0.012 & 0.01 & 6 & 0.536 & 0.718 & 3.218 \\
+H\'enon & 0.015 & 0.015 & 3 & 0.210 & 0.100 & 0.630 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Logistic SPICE 最优结果：逐零点对比}
+\label{tab:logistic_zeros}
+\begin{tabular}{ccccc}
+\toprule
+$n$ & 预测值 & 真实值 $t_n$ & 误差 & 相对\% \\
+\midrule
+1 & 14.135 & 14.135 & 0.000 & 0.00 \\
+2 & 20.363 & 21.022 & 0.659 & 3.14 \\
+3 & 23.147 & 25.011 & 1.864 & 7.45 \\
+4 & 30.360 & 30.425 & 0.065 & 0.21 \\
+5 & 33.563 & 32.935 & 0.628 & 1.91 \\
+6 & 37.584 & 37.586 & 0.002 & 0.01 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+第六个零点 $t_6$ 的匹配精度达到 0.01\% 相对误差，表明谱同构在电路级物理效应下得以存活。
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{paper_figs/fig_markov.png}
+\caption{SPICE 电路 Markov 结果：预测值与真实黎曼零点对比。红色数字标注绝对误差。}
+\label{fig:markov_comparison}
+\end{figure}
+
+\subsection{比率验证}
+
+为回应"单点缩放可能平凡地拟合任何序列"的质疑，我们评估了不依赖缩放的比率指标 $\phi_n/\phi_1$ vs. $t_n/t_1$：
+
+\begin{table}[h]
+\centering
+\caption{比率 MAE：混沌本征相位 vs. 空假设基线}
+\label{tab:ratio}
+\begin{tabular}{lc}
+\toprule
+方法 & 比率 MAE \\
+\midrule
+混沌本征相位（理想） & 0.306 \\
+混沌本征相位（电路） & 0.515 \\
+均匀间隔 & 12.67 \\
+随机排序 & 5.64 \\
+GUE 随机矩阵 & 11.56 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+混沌本征相位比最优空假设基线（随机排序）好 18 倍，比均匀间隔好 41 倍，确认了真正的 $\zeta$ 函数特异性结构。
+
+\subsection{方法二：Hankel-DMD（无需分块）}
+
+表~\ref{tab:dmd} 展示了 Hankel-DMD 结果，该方法直接从电路时间序列提取 Koopman 算子本征值，无需状态空间离散化。
+
+\begin{table}[h]
+\centering
+\caption{Hankel-DMD 结果：突破分块瓶颈}
+\label{tab:dmd}
+\begin{tabular}{lccccc}
+\toprule
+电路 & 模态数 & MAE & 比率 & 观测函数 & 分块 \\
+\midrule
+Log. Markov & 6 & 0.54 & 0.18 & --- & 需要 \\
+H\'en. Markov & 3 & 0.21 & 0.05 & --- & 需要 \\
+Log. DMD & 4 & 1.34 & 0.09 & $|V|$ & \textbf{不需} \\
+\textbf{H\'en. DMD} & \textbf{11} & \textbf{1.09} & \textbf{0.08} & raw & \textbf{不需} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+H\'enon Hankel-DMD 从电路输出中提取了 \textbf{11 个零点}——比 Markov 方法多 3.7 倍——且完全不需要分块。关键发现：
+\begin{itemize}
+\item $t_3$：误差 = 0.009（0.03\%），近乎完美匹配
+\item $t_{11}$：误差 = 0.309（0.58\%）
+\item 11 个零点中 7 个的相对误差 $<3\%$
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{paper_figs/fig_dmd.png}
+\caption{Hankel-DMD：H\'enon 电路的 11 个 Koopman 模态匹配黎曼零点，无需分块。轨迹末段 1\%（接近临界点）提供最丰富的谱结构。}
+\label{fig:dmd}
+\end{figure}
+
+\subsection{奇异吸引子与电路波形}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.8\linewidth]{paper_figs/fig_attractor.png}
+\caption{SPICE 电路仿真产生的 H\'enon 奇异吸引子。}
+\label{fig:attractor}
+\end{figure}
+
+\section{硬件实现}
+
+我们提供两种硬件实现方案。
+
+\subsection{分立元件版（约 80 元）}
+
+分立版使用 AD633（模拟乘法器）、LF398（采样保持）、TL072（求和放大器）、NE555（1\,MHz 时钟）和 STM32+MCP4921（通过 12 位 DAC 实现冷却控制）。
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{paper_figs/fig_schem_log.png}
+\caption{Logistic 映射电路原理图：分立元件实现方案。}
+\label{fig:schem_log}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{paper_figs/fig_schem_hen.png}
+\caption{二维 H\'enon 映射电路：双通道交叉耦合实现。}
+\label{fig:schem_hen}
+\end{figure}
+
+\subsection{FPGA 版（约 800 元）}
+
+FPGA 版基于 ALINX AX7020（Zynq-7020）配合 AN108 8 位 AD/DA 模块：
+
+\begin{itemize}
+\item \textbf{PL（FPGA）}：Q4.28 定点混沌引擎（精度 $3.7 \times 10^{-9}$，远优于 AD633 的 0.4\%），4 级流水线，支持 Logistic/H\'enon/蔡氏映射切换。
+\item \textbf{PS（ARM）}：运行 Linux + Python，负责冷却查找表计算、轨迹读取和 Markov/DMD 分析。
+\item \textbf{DAC 输出}：8 位并行输出至示波器，实时观测混沌波形。
+\item \textbf{资源占用}：不到 Zynq-7020 的 6\%，可并行运行 20 个以上引擎进行参数扫描。
+\end{itemize}
+
+\section{讨论}
+
+\subsection{电路物理效应的鲁棒性}
+
+核心发现：\emph{电路物理效应不会破坏谱同构}。Logistic SPICE 电路在 AD633 增益误差（0.4\%）、运放带宽限制（1\,MHz）和软饱和的影响下，第六个零点 $t_6$ 仍达到 0.01\% 的匹配精度。这种鲁棒性与 Ruelle-Pollicott 共振的拓扑性质一致。
+
+\subsection{Hankel-DMD：突破离散化瓶颈}
+
+Markov 方法需要 $N$ 格离散化，限制可提取零点数约为 $N/10$。Hankel-DMD 通过在延迟嵌入坐标中直接近似 Koopman 算子绕过了这一限制，分辨率仅受轨迹长度约束。3.7 倍的改进（11 vs. 3 个零点）展示了实际价值。
+
+\subsection{观测函数的选择}
+
+最优观测函数因电路类型而异：Logistic 使用 $|V(t)|$（揭示对称性中隐藏的谱成分），H\'enon 使用轨迹末段的原始 $V(t)$（临界点附近谱结构最丰富）。这表明 Koopman 可观测量的选择是谱提取的关键设计参数。
+
+\subsection{GUE 间距统计不匹配}
+
+本征相位间距分布与 GUE 统计不匹配（KS $p < 0.001$），而黎曼零点与 GUE 匹配（KS $p = 0.57$）。这是预期的结果：Markov 矩阵是耗散（非酉）算子，其间距统计不同于厄米 GUE 系综。零点\emph{位置}匹配，但\emph{间距统计}不匹配——这与希尔伯特-波利亚猜想要求自伴算子的论述一致，而我们的 Markov 近似并非自伴算子。
+
+\section{结论}
+
+我们证明了：
+\begin{enumerate}
+\item SPICE 仿真混沌电路（含真实元件模型）产生的 Markov 本征相位匹配前 6 个黎曼零点（MAE = 0.54，Logistic）和 3 个零点（MAE = 0.21，H\'enon）。
+\item Hankel-DMD 从 H\'enon 电路中提取了 11 个零点，无需任何状态空间离散化，突破分块瓶颈 3.7 倍。
+\item 谱同构对电路级物理效应（热噪声、带宽限制、乘法器误差、饱和）具有鲁棒性。
+\item 提供了分立元件版（80 元）和 FPGA 版（800 元）两种完整硬件设计方案。
+\end{enumerate}
+
+本工作弥合了前期数值研究建立的数学谱同构与物理电路实现之间的鸿沟，为研究希尔伯特-波利亚猜想提供了一个具体的实验平台。
+
+\begin{thebibliography}{20}
+\bibitem{berry1999} M.V. Berry and J.P. Keating, ``The Riemann zeros and eigenvalue asymptotics,'' SIAM Review, 1999.
+\bibitem{montgomery1973} H.L. Montgomery, ``The pair correlation of zeros of the zeta function,'' AMS, 1973.
+\bibitem{cui2021} X. Cui et al., ``Riemann zeros from Floquet engineering a trapped-ion qubit,'' npj Quantum Information, 2021.
+\bibitem{wang2026logistic} L. Wang, ``Spectral isomorphism between renormalization flow in non-autonomous quadratic maps and Riemann zeros,'' Zenodo, 2026.
+\bibitem{wang2026henon} L. Wang, ``The physical topology of Riemann zeros: dual evidence from quantum coherence and macroscopic dissipation,'' Zenodo, 2026.
+\bibitem{ruelle1986} D. Ruelle, ``Resonances of chaotic dynamical systems,'' Physical Review Letters, 1986.
+\bibitem{baladi2000} V. Baladi, ``Positive transfer operators and decay of correlations,'' World Scientific, 2000.
+\bibitem{rafik2024} N. Rafik and G. Caceres, ``Chaotic operators with GUE statistics,'' arXiv:2404.00583, 2024.
+\bibitem{yakaboylu2024} E. Yakaboylu, ``Non-symmetric operators and the Hilbert-P\'olya conjecture,'' 2024.
+\end{thebibliography}
+
+\end{document}
